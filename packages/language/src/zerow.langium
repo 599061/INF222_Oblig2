@@ -2,8 +2,8 @@ grammar Zerow
 
 entry Program:
     units+=UnitDeclaration*
-    stmt+=(VariableDeclaration | Assignment)
-    returns+=ReturnStatement*;
+    stmt+=(VariableDeclaration | Assignment)*
+    returnStmts+=ReturnStatement*;
 
 UnitDeclaration:
     'unit' name=ID;
