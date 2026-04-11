@@ -92,7 +92,7 @@ export class ZerowValidator {
 
         function validateReference(ref: VariableReference, stmtIndex: number): void {
             const targetDecl = ref.ref.ref;
-            if (!targetDecl) return; // already reported by Langium
+            if (!targetDecl) return;
             const declIdx = declarationIndex.get(targetDecl.name);
             if (declIdx !== undefined && declIdx > stmtIndex) {
                 accept('error', `Variable '${targetDecl.name}' is referenced before its declaration.`, { node: ref, property: 'ref' });
