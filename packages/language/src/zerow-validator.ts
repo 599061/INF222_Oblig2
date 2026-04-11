@@ -37,6 +37,7 @@ export class ZerowValidator {
         function buildMeasureSet(program: Program): Set<string> {
             return new Set(program.units.map(u => u.name))
         }
+        const measureSet = buildMeasureSet(model);
 
         function validateStatement(stmt: VariableDeclaration | Assignment, stmtIndex: number): void {
             if (stmt.$type === 'VariableDeclaration') validateDeclarationStmt(stmt, stmtIndex);
@@ -60,7 +61,7 @@ export class ZerowValidator {
                 }
             }
             validateExpression(stmt.value, stmtIndex);
-            const targetUnit = resolveReference(stmt.target.ref!.value);
+            const targetUnit = stmt.target.ref ? resolveReference(stmt.target.ref.value) : undefined;
             const valueUnit = resolveReference(stmt.value);
             if (targetUnit && valueUnit && targetUnit !== valueUnit) {
                 accept('error', `Unit mismatch: expected '${targetUnit}', got '${valueUnit}'.`, { node: stmt, property: 'value' });
@@ -84,7 +85,7 @@ export class ZerowValidator {
         }
 
         function validateLiteral(lit: Literal): void {
-            if (!lit.unit.ref) {
+            if (!measureSet.has(lit.unit.$refText)) {
                 accept('error', `Unknown unit '${lit.unit.$refText}'.`, { node: lit, property: 'unit' });
             }
         }
