@@ -39,6 +39,9 @@ export class ZerowValidator {
         }
         const measureSet = buildMeasureSet(model);
 
+        // Tracks the current unit of each variable, updated as each statement is processed.
+        const varUnits = new Map<string, string | undefined>();
+
         function validateStatement(stmt: VariableDeclaration | Assignment, stmtIndex: number): void {
             if (stmt.$type === 'VariableDeclaration') validateDeclarationStmt(stmt, stmtIndex);
             else validateAssignmentStmt(stmt, stmtIndex);
@@ -50,6 +53,7 @@ export class ZerowValidator {
                 }
                 seenNames.add(stmt.name);
                 validateExpression(stmt.value, stmtIndex);
+                varUnits.set(stmt.name, resolveReference(stmt.value));
         }
 
         function validateAssignmentStmt(stmt: Assignment, stmtIndex: number): void {
@@ -61,10 +65,16 @@ export class ZerowValidator {
                 }
             }
             validateExpression(stmt.value, stmtIndex);
-            const targetUnit = stmt.target.ref ? resolveReference(stmt.target.ref.value) : undefined;
-            const valueUnit = resolveReference(stmt.value);
-            if (targetUnit && valueUnit && targetUnit !== valueUnit) {
-                accept('error', `Unit mismatch: expected '${targetUnit}', got '${valueUnit}'.`, { node: stmt, property: 'value' });
+            // Unit mismatch check only when assigning a variable reference (literal reassignments are always valid).
+            if (isVariableReference(stmt.value) && stmt.target.ref) {
+                const targetUnit = varUnits.get(stmt.target.ref.name);
+                const valueUnit = resolveReference(stmt.value);
+                if (targetUnit && valueUnit && targetUnit !== valueUnit) {
+                    accept('error', `Unit mismatch: cannot assign '${valueUnit}' to variable of type '${targetUnit}'.`, { node: stmt, property: 'value' });
+                }
+            }
+            if (stmt.target.ref) {
+                varUnits.set(stmt.target.ref.name, resolveReference(stmt.value));
             }
         }
 
@@ -85,13 +95,13 @@ export class ZerowValidator {
         }
 
         function validateLiteral(lit: Literal): void {
-            if (!measureSet.has(lit.unit.$refText)) {
-                accept('error', `Unknown unit '${lit.unit.$refText}'.`, { node: lit, property: 'unit' });
+            if (!lit.unit || !measureSet.has(lit.unit.$refText)) {
+                accept('error', `Unknown unit '${lit.unit?.$refText}'.`, { node: lit, property: 'unit' });
             }
         }
 
         function validateReference(ref: VariableReference, stmtIndex: number): void {
-            const targetDecl = ref.ref.ref;
+            const targetDecl = ref.ref?.ref;
             if (!targetDecl) return;
             const declIdx = declarationIndex.get(targetDecl.name);
             if (declIdx !== undefined && declIdx > stmtIndex) {
@@ -101,9 +111,9 @@ export class ZerowValidator {
 
         function resolveReference(expr: Expression): string | undefined {
             if (isLiteral(expr))
-                return expr.unit.ref?.name;
+                return expr.unit?.ref?.name;
             if (isVariableReference(expr))
-                return expr.ref.ref ? resolveReference(expr.ref.ref.value) : undefined;
+                return varUnits.get(expr.ref?.ref?.name ?? '');
             if (isGroupExpression(expr))
                 return resolveReference(expr.expression);
             if (isNegation(expr))
@@ -115,6 +125,10 @@ export class ZerowValidator {
 
         for (let i = 0; i < model.stmt.length; i++) {
             validateStatement(model.stmt[i], i);
+        }
+
+        for (const ret of model.returnStmts) {
+            validateExpression(ret.expression, model.stmt.length);
         }
     }
 }
